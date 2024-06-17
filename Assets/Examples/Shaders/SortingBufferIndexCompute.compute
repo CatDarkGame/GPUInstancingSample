@@ -1,0 +1,36 @@
+#pragma kernel CSSortingBufferIndex
+
+#define thread_group_size_x 32
+#define thread_group_size_y 1
+#define thread_group_size_z 1
+
+// #include "InstancingData.hlsl" // 구조화 버퍼 정보를 hlsl Include로 사용 가능
+struct ObjectInstanceData   
+{
+    float4x4    objectToWorld;      // 64
+    float4      baseColor;          // 16
+};
+
+struct IndirectArguments
+{
+    uint indexCountPerInstance;
+    uint instanceCount;
+    uint startIndexLocation;
+    uint baseVertexLocation;
+    uint startInstanceLocation;
+};
+
+StructuredBuffer<ObjectInstanceData> _ObjectDataBuffer;
+StructuredBuffer<uint> _VisibleIndexBuffer;
+uint _VisibleCount;
+
+RWStructuredBuffer<ObjectInstanceData> _ObjectSharedBuffer;
+RWStructuredBuffer<IndirectArguments> _IndirectArgsBuffer;
+
+[numthreads(thread_group_size_x, thread_group_size_y, thread_group_size_z)]
+void CSSortingBufferIndex(uint3 id : SV_DispatchThreadID)
+{
+    uint index = _VisibleIndexBuffer[id.x];
+    _ObjectSharedBuffer[id.x] = _ObjectDataBuffer[index];
+    _IndirectArgsBuffer[id.x].instanceCount = _VisibleCount;
+} 
