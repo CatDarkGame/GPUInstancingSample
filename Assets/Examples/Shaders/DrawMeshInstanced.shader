@@ -8,7 +8,7 @@ Shader "CatDarkGame/GPUInstancingSample/DrawMeshInstanced"
 
     SubShader
     {
-        Tags { "RenderType" = "Transparent" "Queue"="Transparent" "RenderPipeline" = "UniversalPipeline" }
+        Tags { "RenderType" = "Opaque" "Queue"="Geometry" "RenderPipeline" = "UniversalPipeline" }
         LOD 100
 
         Pass

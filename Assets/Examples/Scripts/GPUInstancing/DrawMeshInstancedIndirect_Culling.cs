@@ -133,29 +133,59 @@ namespace CatDarkGame.GPUInstancingSample
         private void Update()
         {
             if (!IsNotNullRefs()) return;
-            int visibleCount = FrustumCulling(out uint[] visibleInstances);
+            int visibleCount = FrustumCullingWithSorting(out uint[] visibleInstances);
             if (visibleCount <= 0) return;
             Update_VisibleBuffer(visibleInstances, visibleCount);
             Graphics.DrawMeshInstancedIndirect(mesh, 0, _instanceMaterial, _bounds, _indirectArgsBuffer);
         }
         
-        private int FrustumCulling(out uint[] visibleInstances)
+        private int FrustumCullingWithSorting(out uint[] visibleInstances)
         {
             if (!targetCamera)
             {
                 visibleInstances = null;
                 return 0;
             }
+    
+            // Frustum Culling
             _frustumPlanes = GeometryUtility.CalculateFrustumPlanes(targetCamera);
-            visibleInstances = new uint[objectCount];
+            uint[] tempVisibleInstances = new uint[objectCount];
+            float[] distances = new float[objectCount];
             int visibleCount = 0;
+    
             for (int i = 0; i < objectCount; i++)
             {
                 Bounds bounds = _boundsDatas[i].bounds;
                 if (GeometryUtility.TestPlanesAABB(_frustumPlanes, bounds))
                 {
-                    visibleInstances[visibleCount++] = (uint)i;
+                    tempVisibleInstances[visibleCount] = (uint)i;
+                    distances[visibleCount] = Vector3.Distance(targetCamera.transform.position, bounds.center);
+                    visibleCount++;
                 }
+            }
+    
+            // 가까운 거리순 인덱스 정렬 (인스턴스 인덱스 순서대로 렌더링되기 때문에 거리 정렬을 통해 불투명 오브젝트 ZTest를 위함)
+            for (int i = 0; i < visibleCount - 1; i++)
+            {
+                for (int j = 0; j < visibleCount - i - 1; j++)
+                {
+                    if (distances[j] > distances[j + 1])
+                    {
+                        float tempDistance = distances[j];
+                        distances[j] = distances[j + 1];
+                        distances[j + 1] = tempDistance;
+                        
+                        uint tempInstance = tempVisibleInstances[j];
+                        tempVisibleInstances[j] = tempVisibleInstances[j + 1];
+                        tempVisibleInstances[j + 1] = tempInstance;
+                    }
+                }
+            }
+    
+            visibleInstances = new uint[visibleCount];
+            for (int i = 0; i < visibleCount; i++)
+            {
+                visibleInstances[i] = tempVisibleInstances[i];
             }
             return visibleCount;
         }
