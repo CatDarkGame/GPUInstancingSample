@@ -81,9 +81,7 @@ Shader "CatDarkGame/GPUInstancingSample/DrawMeshInstanced"
                 half4 finalColor = texColor * _BaseColor;
                 return finalColor;
             }
-
-         
-                        
+            
             ENDHLSL
         }
     }

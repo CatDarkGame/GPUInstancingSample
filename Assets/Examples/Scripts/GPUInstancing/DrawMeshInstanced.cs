@@ -10,15 +10,15 @@ namespace CatDarkGame.GPUInstancingSample
         
         private Matrix4x4[] _localToWorldMatrixs;
         private Material _instanceMaterial;
-
         private MaterialPropertyBlock _materialPropertyBlock;
+        
         private void Awake()
         {
             _localToWorldMatrixs = CommonUtils.GetRandomLocalToWorldMatrices(objectCount);
             _instanceMaterial = new Material(sharedMaterial);
             _instanceMaterial.enableInstancing = true;
             _instanceMaterial.hideFlags = HideFlags.HideAndDontSave;
-
+            
             _materialPropertyBlock = new MaterialPropertyBlock();
             _materialPropertyBlock.SetVectorArray("_BaseColor", CommonUtils.GetRandomColorVectorArray(objectCount));
         }

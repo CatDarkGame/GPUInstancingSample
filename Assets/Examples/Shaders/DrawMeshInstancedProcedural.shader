@@ -28,7 +28,9 @@ Shader "CatDarkGame/GPUInstancingSample/DrawMeshInstancedProcedural"
             #pragma fragment frag
             
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/GlobalIllumination.hlsl"
+            #include "Instancing.hlsl"
             
             CBUFFER_START(UnityPerMaterial)
                 float4 _BaseMap_ST;
@@ -36,61 +38,12 @@ Shader "CatDarkGame/GPUInstancingSample/DrawMeshInstancedProcedural"
             CBUFFER_END
             TEXTURE2D(_BaseMap);    SAMPLER(sampler_BaseMap);
             
-           #if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)
-                struct ObjectInstanceData   
-                {
-                    float4x4    objectToWorld;      // 64
-                    float4      baseColor;          // 16
-                };
-                StructuredBuffer<ObjectInstanceData> _ObjectInstanceData;
-            
-                void ConfigureProcedural (){}   // instnacing_options procedual에 참조할 더미 함수
-            
-                void ConfigureProcedural_Vertex (inout ObjectInstanceData outObjectData)    // vertex stage에서 선언한 지역 변수 참조
-                {
-                    uint id = unity_InstanceID;
-                    ObjectInstanceData objectData = _ObjectInstanceData[id];
-
-                    float4x4 objectToWorld = unity_ObjectToWorld;
-                    objectToWorld._11_21_31_41 = float4(objectData.objectToWorld._11_21_31, 0.0f);
-                    objectToWorld._12_22_32_42 = float4(objectData.objectToWorld._12_22_32, 0.0f);
-                    objectToWorld._13_23_33_43 = float4(objectData.objectToWorld._13_23_33, 0.0f);
-                    objectToWorld._14_24_34_44 = float4(objectData.objectToWorld._14_24_34, 1.0f);
-
-                    outObjectData.objectToWorld = objectToWorld;
-                }
-
-                void ConfigureProcedural_Fragment (inout ObjectInstanceData outObjectData)    // fragment stage에서 선언한 지역 변수 참조
-                {
-                    uint id = unity_InstanceID;
-                    ObjectInstanceData objectData = _ObjectInstanceData[id];
-                    outObjectData.baseColor = objectData.baseColor;
-                }
-
-                // UNITY_SETUP_INSTANCE_ID 대신 호출할 디파인 함수 선언
-                #define SETUP_INSTANCE_ID_VERTEX(input) UnitySetupInstanceID(UNITY_GET_INSTANCE_ID(input));      \
-                                                        ObjectInstanceData instanceData = (ObjectInstanceData)0; \
-                                                        ConfigureProcedural_Vertex(instanceData);
-            
-                #define SETUP_INSTANCE_ID_FRAGMENT(input) UnitySetupInstanceID(UNITY_GET_INSTANCE_ID(input));      \
-                                                          ObjectInstanceData instanceData = (ObjectInstanceData)0; \
-                                                          ConfigureProcedural_Fragment(instanceData);
-
-            
-                // Instance 베리언츠 전용 ObjectToWorld 디파인 함수 선언 
-                #define TransformObjectToWorld_Instance(positionOS) mul(instanceData.objectToWorld, float4(positionOS.xyz, 1.0)).xyz
-                #define _BaseColor instanceData.baseColor;
-            #else
-                // Instance 베리언츠 상태가 아닐때 호출되는 디파인 함수
-                #define SETUP_INSTANCE_ID_VERTEX(input)
-                #define SETUP_INSTANCE_ID_FRAGMENT(input)
-                #define TransformObjectToWorld_Instance(positionOS) TransformObjectToWorld(positionOS.xyz)
-            #endif
-            
+            #define _BaseColor INSTANCING_PROP(_BaseColor)
             
             struct Attributes
             {
                 float4 positionOS    : POSITION;
+                float3 normalOS      : NORMAL;
                 float2 uv            : TEXCOORD0;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
@@ -98,6 +51,7 @@ Shader "CatDarkGame/GPUInstancingSample/DrawMeshInstancedProcedural"
             struct Varyings
             {
                 float4 positionCS    : SV_POSITION;
+                float3 normalWS      : normalWS;
                 float2 uv            : TEXCOORD0;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             }; 
@@ -105,23 +59,43 @@ Shader "CatDarkGame/GPUInstancingSample/DrawMeshInstancedProcedural"
             Varyings vert(Attributes input)
             {
                 Varyings output = (Varyings)0;
-                SETUP_INSTANCE_ID_VERTEX(input);
+                UNITY_SETUP_INSTANCE_ID(input); 
                 UNITY_TRANSFER_INSTANCE_ID(input, output);
 
                 float4 positionOS = input.positionOS;
-                float3 positionWS = TransformObjectToWorld_Instance(positionOS.xyz);
+                float3 positionWS = TransformObjectToWorld(positionOS.xyz);
                 float4 positionCS = TransformWorldToHClip(positionWS);
+
+                float3 normalOS = input.normalOS;
+                float3 normalWS = TransformObjectToWorldNormal(normalOS);
+                
                 output.positionCS = positionCS;
+                output.normalWS = normalWS;
                 output.uv = input.uv * _BaseMap_ST.xy + _BaseMap_ST.zw;
                 return output;
             }
 
             half4 frag(Varyings input) : SV_Target
             {
-                SETUP_INSTANCE_ID_FRAGMENT(input);
+                UNITY_SETUP_INSTANCE_ID(input);
+                float3 normalWS = NormalizeNormalPerPixel(input.normalWS);
+                
                 float2 baseMapUV = input.uv.xy;
-                half4 texColor = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, baseMapUV);
-                half4 finalColor = texColor * _BaseColor;
+                half4 baseCol = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, baseMapUV);
+                half3 albedo = baseCol.rgb * _BaseColor.rgb;
+                half alpha = baseCol.a * _BaseColor.a;
+
+                Light light = GetMainLight();
+                half NdotL = dot(normalWS, light.direction);
+                half lambert = NdotL * 0.5h + 0.5h;
+                lambert = step(0.5h, lambert);
+                half3 indirectDiffuse = SampleSH(normalWS) * albedo;
+                half3 lightDiffuseColor = lambert * albedo * light.color.rgb;
+                lightDiffuseColor += indirectDiffuse;
+                
+                half4 finalColor = 1.0h;
+                finalColor.rgb = lightDiffuseColor;
+                finalColor.a = alpha;
                 return finalColor;
             }
             
