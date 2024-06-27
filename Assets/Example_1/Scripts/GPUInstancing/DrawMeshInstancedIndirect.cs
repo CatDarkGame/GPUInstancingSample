@@ -72,7 +72,8 @@ namespace CatDarkGame.GPUInstancingSample
                 mesh.GetBaseVertex(subMeshIndex),   // Start Vertex Location
                 0,                                  // Start Instance Location
             };
-            _indirectArgsBuffer = new ComputeBuffer(1, sizeof(uint) * indirectArgsDatas.Length, ComputeBufferType.IndirectArguments);
+            _indirectArgsBuffer = new ComputeBuffer(1, 
+                sizeof(uint) * indirectArgsDatas.Length, ComputeBufferType.IndirectArguments);
             _indirectArgsBuffer.SetData(indirectArgsDatas);
             
             // Setup Material

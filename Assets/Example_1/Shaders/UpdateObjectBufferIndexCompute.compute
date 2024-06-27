@@ -28,4 +28,5 @@ void CSUpdateObjectBufferIndex(uint3 id : SV_DispatchThreadID)
     uint index = _VisibleIndexBuffer[id.x];
     _ObjectSharedBuffer[id.x] = _ObjectBuffer[index];
     _IndirectArgsBuffer[id.x].instanceCount = _VisibleCount;
-} 
+}
+

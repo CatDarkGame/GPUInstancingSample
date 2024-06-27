@@ -52,6 +52,7 @@ namespace CatDarkGame.GPUInstancingSample
         private ComputeBuffer _objectSharedBuffer;  // 드로우 오브젝트 데이터 버퍼 (InFrustum)
         private ComputeBuffer _visibleIndexBuffer;  // 드로우 오브젝트 인덱스 버퍼 (InFrustum)
         private ComputeBuffer _indirectArgsBuffer;  // Argument 버퍼
+        private uint[] _visibleIndexData;
         private Bounds _bounds;
         private BoundsData[] _boundsDatas;
         private Plane[] _frustumPlanes;
@@ -77,6 +78,7 @@ namespace CatDarkGame.GPUInstancingSample
             _indirectArgsBuffer = null;
             _frustumPlanes = null;
             _boundsDatas = null;
+            _visibleIndexData = null;
         }
 
         private void Init_InstancingData()
@@ -107,13 +109,14 @@ namespace CatDarkGame.GPUInstancingSample
             int bufferSize = Marshal.SizeOf<ObjectBuffer>();
             _bufferCount = Mathf.Max(objectCount, ComputePropertyID.ThreadGroupSize.x);
             _objectBuffer = new ComputeBuffer(_bufferCount, bufferSize, ComputeBufferType.Default);
+            _objectBuffer.SetData(objectBufferData);
             _objectSharedBuffer = new ComputeBuffer(_bufferCount, bufferSize, ComputeBufferType.Default);
             _visibleIndexBuffer = new ComputeBuffer(_bufferCount, sizeof(uint), ComputeBufferType.Default);
+            _visibleIndexData = new uint[objectCount];
             
             // Setup ArgumentBuffer
             uint[] argDataIdentity = GetArgDataIdentity(mesh, 0);
             _indirectArgsBuffer = new ComputeBuffer(1, sizeof(uint) * argDataIdentity.Length, ComputeBufferType.IndirectArguments);
-            _objectBuffer.SetData(objectBufferData);
             _indirectArgsBuffer.SetData(argDataIdentity);
             
             // Setup ComputeShader
@@ -133,19 +136,15 @@ namespace CatDarkGame.GPUInstancingSample
         private void Update()
         {
             if (!IsNotNullRefs()) return;
-            int visibleCount = FrustumCullingWithSorting(out uint[] visibleInstances);
+            int visibleCount = FrustumCullingWithSorting(ref _visibleIndexData);
             if (visibleCount <= 0) return;
-            Update_VisibleBuffer(visibleInstances, visibleCount);
+            Update_VisibleBuffer(_visibleIndexData, visibleCount);
             Graphics.DrawMeshInstancedIndirect(mesh, 0, _instanceMaterial, _bounds, _indirectArgsBuffer);
         }
         
-        private int FrustumCullingWithSorting(out uint[] visibleInstances)
+        private int FrustumCullingWithSorting(ref uint[] visibleIndexData)
         {
-            if (!targetCamera)
-            {
-                visibleInstances = null;
-                return 0;
-            }
+            if (!targetCamera) return 0;
     
             // Frustum Culling
             _frustumPlanes = GeometryUtility.CalculateFrustumPlanes(targetCamera);
@@ -181,21 +180,23 @@ namespace CatDarkGame.GPUInstancingSample
                     }
                 }
             }
-    
-            visibleInstances = new uint[visibleCount];
+            
             for (int i = 0; i < visibleCount; i++)
             {
-                visibleInstances[i] = tempVisibleInstances[i];
+                visibleIndexData[i] = tempVisibleInstances[i];
             }
             return visibleCount;
         }
 
-        private void Update_VisibleBuffer(uint[] visibleInstances, int visibleCount)
+        private void Update_VisibleBuffer(uint[] visibleIndexData, int visibleCount)
         {
-            if (visibleCount <= 0 || visibleInstances == null || visibleInstances.Length <= 0) return;
-            _visibleIndexBuffer.SetData(visibleInstances, 0, 0, visibleCount);
+            if (visibleCount <= 0 || visibleIndexData == null || visibleIndexData.Length <= 0) return;
+            _visibleIndexBuffer.SetData(visibleIndexData, 0, 0, visibleCount);
             appendBufferCompute.SetInt(ComputePropertyID.VisibleCountID, visibleCount);
-            appendBufferCompute.Dispatch(_appendBufferComputeKernelId, _bufferCount / ComputePropertyID.ThreadGroupSize.x, ComputePropertyID.ThreadGroupSize.y, ComputePropertyID.ThreadGroupSize.z);
+            appendBufferCompute.Dispatch(_appendBufferComputeKernelId, 
+                _bufferCount / ComputePropertyID.ThreadGroupSize.x, 
+                ComputePropertyID.ThreadGroupSize.y, 
+                ComputePropertyID.ThreadGroupSize.z);
         }
         
         private bool IsNotNullRefs()
