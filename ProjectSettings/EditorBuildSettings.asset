@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Scenes/SampleScene.unity
+    path: Assets/Example_1/Scenes/Example_1_GPUInstancingSimple.unity
     guid: 99c9720ab356a0642a771bea13969a05
+  - enabled: 1
+    path: Assets/Example_2/Scenes/Example_2_DrawIndirectDifferentMeshs.unity
+    guid: 6e09f58385b30884abac464bb576a1d8
   m_configObjects: {}
